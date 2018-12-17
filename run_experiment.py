@@ -37,11 +37,9 @@ flags.DEFINE_float(
     "batch_size", 32,
     ("Can be float or integer.  Float indicates batch size as a percentage "
      "of training data size."))
-flags.DEFINE_float("active_sampling_percentage", 0.5,
-                    "Mixture weights on active sampling.")
 flags.DEFINE_integer("trials", 2,
                      "Number of curves to create using different seeds")
-flags.DEFINE_string("max_dataset_size", "500",
+flags.DEFINE_float("max_dataset_size", 0.4,
                     ("maximum number of datapoints to include in data "
                      "zero indicates no limit"))
 flags.DEFINE_integer("seed", 1, "Seed to use for rng and random state")
@@ -64,9 +62,7 @@ def generate_one_curve(X,
                        warmstart_size,
                        batch_size,
                        select_model=None,
-                       active_p=1.0,
-                       max_points=None,
-                       train_horizon=0.5):
+                       max_points=None):
   """Creates one learning curve for both active and passive learning.
 
   Will calculate accuracy on validation set as the number of training data
@@ -91,7 +87,6 @@ def generate_one_curve(X,
       used to select new datapoints to label.  Model must implement fit, predict
       and depending on AL method may also need decision_function.
     confusion: percentage of labels of one class to flip to the other
-    active_p: percent of batch to allocate to active learning
     max_points: limit dataset size for preliminary
     standardize_data: wheter to standardize the data to 0 mean unit variance
     norm_data: whether to normalize the data.  Default is False for logistic
@@ -103,18 +98,11 @@ def generate_one_curve(X,
     sampler_states: dictionary of sampler objects for debugging
   """
 
-  def select_batch(sampler, uniform_sampler, mixture, N, already_selected,
-                   **kwargs):
-    n_active = int(mixture * N)
-    n_passive = N - n_active
-    kwargs["N"] = n_active
+  def select_batch(sampler, N, already_selected, **kwargs):
+    kwargs["N"] = N
     kwargs["already_selected"] = already_selected
     batch_AL = sampler.select_batch(**kwargs)
-    already_selected = already_selected + batch_AL
-    kwargs["N"] = n_passive
-    kwargs["already_selected"] = already_selected
-    batch_PL = uniform_sampler.select_batch(**kwargs)
-    return batch_AL + batch_PL
+    return batch_AL
 
   np.random.seed(seed)
   data_splits = [2./3, 1./6, 1./6]
@@ -122,7 +110,11 @@ def generate_one_curve(X,
   # 2/3 of data for training
   if max_points is None:
     max_points = len(y)
-  train_size = int(min(max_points, len(y)) * data_splits[0])
+  if max_points < 1:
+    max_points = int(max_points * len(y))
+  else:
+    max_points = int(max_points)
+  train_size = int(min(max_points, len(y) * data_splits[0]))
   if batch_size < 1:
     batch_size = int(batch_size * train_size)
   else:
@@ -141,8 +133,7 @@ def generate_one_curve(X,
         str(seed_batch) + " batch size: " + str(batch_size) + " seed: " + str(seed))
 
   # Initialize samplers
-  uniform_sampler = AL_MAPPING["uniform"](X_train, y_train, seed)
-  sampler = sampler(X_train, y_train, seed)
+  sampler = sampler(X_train, seed)
 
   results = {}
   data_sizes = []
@@ -155,7 +146,7 @@ def generate_one_curve(X,
     select_model = score_model
     same_score_select = True
 
-  n_batches = int(np.ceil((train_horizon * train_size - seed_batch) *
+  n_batches = int(np.ceil((train_size - seed_batch) *
                           1.0 / batch_size)) + 1
   for b in range(n_batches):
     n_train = seed_batch + min(train_size - seed_batch, b * batch_size)
@@ -183,8 +174,7 @@ def generate_one_curve(X,
         "y_test": y_val,
         "y": y_train
     }
-    new_batch = select_batch(sampler, uniform_sampler, active_p, n_sample,
-                             selected_inds, **select_batch_inputs)
+    new_batch = select_batch(sampler, n_sample, selected_inds, **select_batch_inputs)
     selected_inds.extend(new_batch)
     print('Requested: %d, Selected: %d' % (n_sample, len(new_batch)))
     assert len(new_batch) == n_sample
@@ -225,8 +215,6 @@ def main(argv):
             save_dir, "log-" + strftime("%Y-%m-%d-%H-%M-%S", gmtime()) + ".txt")
         sys.stdout = utils.Logger(filename)
 
-    max_dataset_size = None if FLAGS.max_dataset_size == "0" else int(
-        FLAGS.max_dataset_size)
     X, y = utils.get_mldata(FLAGS.data_dir, FLAGS.dataset) #load dataset!
     starting_seed = FLAGS.seed
 
@@ -250,8 +238,7 @@ def main(argv):
                            warmstart_size=FLAGS.warmstart_size,
                            batch_size=FLAGS.batch_size,
                            select_model=select_model,
-                           active_p=FLAGS.active_sampling_percentage,
-                           max_points=max_dataset_size)
+                           max_points=FLAGS.max_dataset_size)
 
         key = (FLAGS.dataset, FLAGS.sampling_method, FLAGS.score_method,
                FLAGS.select_method, FLAGS.warmstart_size, FLAGS.batch_size, seed)
