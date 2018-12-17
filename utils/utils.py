@@ -54,6 +54,9 @@ def get_mldata(data_dir, name):
 
     return X, y
 
+#TODO add CoNLL2003 dataset
+#TODO add ner model
+
 def get_model(method, seed=13):
   """Construct sklearn model using either logistic regression or linear svm.
 
@@ -70,13 +73,14 @@ def get_model(method, seed=13):
   """
   if method == "logistic":
     model = LogisticRegression(random_state=seed, multi_class="multinomial",
-                               solver="lbfgs", max_iter=200)
-    params = {"C": [10.0**(i) for i in range(-3, 1)]}
+                               solver="lbfgs", max_iter=200, C = 1e-1)
+    #params = {"C": [10.0**(i) for i in range(-3, 1)]}
 
   else:
     raise NotImplementedError("ERROR: " + method + " not implemented")
 
-  model = GridSearchCV(model, params, cv=3)
+  #model = GridSearchCV(model, params, cv=3)
+  model = model
   return model
 
 def get_train_val_test_splits(X, y, max_points, seed, seed_batch,

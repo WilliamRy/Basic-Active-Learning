@@ -7,9 +7,8 @@ from sampling_methods.sampling_def import SamplingMethod
 
 
 class MarginAL(SamplingMethod):
-  def __init__(self, X, y, seed):
+  def __init__(self, X, seed):
     self.X = X
-    self.y = y
     self.name = 'margin'
 
   def select_batch_(self, model, already_selected, N, **kwargs):
