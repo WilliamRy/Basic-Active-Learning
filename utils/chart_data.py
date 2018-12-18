@@ -1,7 +1,3 @@
-
-"""Experiment charting script.
-"""
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -30,9 +26,7 @@ flags.DEFINE_string(
 flags.DEFINE_string('scoring_methods', 'logistic',
                     'Comma separated string of scoring methods to chart.')
 
-
 FLAGS = flags.FLAGS
-
 
 def combine_results(files, diff=False):
   all_results = {}
@@ -40,13 +34,12 @@ def combine_results(files, diff=False):
     data = pickle.load(gfile.FastGFile(f, 'r'))
     for k in data:
       if isinstance(k, tuple):
-        data[k].pop('noisy_targets')
         data[k].pop('indices')
         data[k].pop('selected_inds')
         data[k].pop('sampler_output')
         key = list(k)
         seed = key[-1]
-        key = key[0:10]
+        key = key[0:-1]
         key = tuple(key)
         if key in all_results:
           if seed not in all_results[key]['random_seeds']:
@@ -61,8 +54,7 @@ def combine_results(files, diff=False):
         all_results[k] = data[k]
   return all_results
 
-
-def plot_results(all_results, score_method, norm, stand, sampler_filter):
+def plot_results(all_results, score_method, sampler_filter):
   colors = {
       'margin':
           'gold',
@@ -103,12 +95,8 @@ def plot_results(all_results, score_method, norm, stand, sampler_filter):
   fields = dict(zip(fields, range(len(fields))))
 
   for k in sorted(all_results.keys()):
-    sampler = k[fields['sampler']]
-    if (isinstance(k, tuple) and
-        k[fields['score_method']] == score_method and
-        k[fields['standardize']] == stand and
-        k[fields['normalize']] == norm and
-        (sampler_filter is None or sampler in sampler_filter)):
+    sampler = sampler_filter[-1]
+    if (isinstance(k, tuple)) and k[fields['score_method']] == score_method:
       results = all_results[k]
 
 
@@ -170,14 +158,6 @@ def get_scoring_method(filename):
   return get_between(filename, 'results_score_', '_select_')
 
 
-def get_normalize(filename):
-  return get_between(filename, '_norm_', '_stand_') == 'True'
-
-
-def get_standardize(filename):
-  return get_between(
-      filename, '_stand_', filename[filename.rfind('_'):]) == 'True'
-
 
 def main(argv):
   del argv  # Unused.
@@ -192,9 +172,7 @@ def main(argv):
   files = [
       f for f in files
       if (get_sampling_method(FLAGS.dataset, f) in sampling_methods and
-          get_scoring_method(f) in scoring_methods and
-          get_normalize(f) == FLAGS.normalize and
-          get_standardize(f) == FLAGS.standardize)
+          get_scoring_method(f) in scoring_methods)
   ]
 
   print('Reading in %d files...' % len(files))
@@ -207,8 +185,6 @@ def main(argv):
     plot_results(
         all_results,
         m,
-        FLAGS.normalize,
-        FLAGS.standardize,
         sampler_filter=sampling_methods)
     plt.title('Dataset: %s, Score Method: %s' % (FLAGS.dataset, m))
     pdf.savefig()
